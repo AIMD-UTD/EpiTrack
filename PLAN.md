@@ -4,7 +4,7 @@
 
 ## Product Features: Interactive Dashboard, etc.
 
-## Tech Stack: PostgreSQL, Node.js, Express, React
+## Tech Stack: PostgreSQL, Node.js, Express, React, Vue
 
 ## Team Roles: Ashwin - Team Lead(Backend/API), Kiran - (Data, Models), Saad - (Designing, Medical research), Shaurya - (Frontend, Data/Models), Sravya(UI/UX, Figma)
 
