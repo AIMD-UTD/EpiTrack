@@ -1,4 +1,13 @@
-#root {
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #fff;
+  color: #111;
+}#root {
   max-width: 1280px;
   margin: 0 auto;
   padding: 2rem;
@@ -39,4 +48,78 @@
 
 .read-the-docs {
   color: #888;
+}
+/* --- Modern Navbar --- */
+.navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 10%;
+  background-color: #fff;
+  border-bottom: 1px solid #eee;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.logo {
+  font-size: 22px;
+  font-weight: 800;
+  color: #111;
+  letter-spacing: -0.5px;
+}
+
+.nav-center {
+  display: flex;
+  gap: 30px;
+}
+
+.nav-link {
+  text-decoration: none;
+  color: #555;
+  font-weight: 500;
+  transition: 0.2s ease;
+  position: relative;
+}
+
+.nav-link:hover {
+  color: #000;
+}
+
+.nav-link.active {
+  color: #000;
+  font-weight: 600;
+}
+
+.nav-right {
+  display: flex;
+  align-items: center;
+}
+
+.btn-get-started {
+  text-decoration: none;
+  background-color: #111;
+  color: #fff;
+  font-weight: 600;
+  padding: 10px 20px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.btn-get-started:hover {
+  background-color: #333;
+}
+
+/* --- Page Wrapper --- */
+.main-content {
+  padding: 60px 10%;
+}
+
+/* --- Footer --- */
+.footer {
+  text-align: center;
+  border-top: 1px solid #eee;
+  padding: 20px 0;
+  color: #444;
+  font-size: 14px;
 }

@@ -1,24 +1,21 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import App from './App.jsx'; // <--- Now imports the main layout file
+import App from './App.jsx';
 import Home from './pages/Home.jsx';
-import About from './pages/About.jsx';
+import Analysis from './pages/Analysis.jsx';
+import Data from './pages/Data.jsx';
 
-// Define the Router structure
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
       <Routes>
-        {/* The Route for the main layout uses the element={<App />} */}
-        <Route path="/" element={<App />}> 
-          
-          {/* These child routes render inside the <Outlet /> within App.jsx */}
-          <Route index element={<Home />} /> 
-          <Route path="about" element={<About />} /> 
-          
+        <Route path="/" element={<App />}>
+          <Route index element={<Home />} />
+          <Route path="analysis" element={<Analysis />} />
+          <Route path="data" element={<Data />} />
         </Route>
       </Routes>
     </BrowserRouter>
-  </React.StrictMode>,
+  </React.StrictMode>
 );

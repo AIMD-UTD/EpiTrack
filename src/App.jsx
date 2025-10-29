@@ -1,22 +1,57 @@
-import React from 'react';
-import { Outlet, Link } from 'react-router-dom'; // Import Link and Outlet
+import React from "react";
+import { Outlet, Link, useLocation } from "react-router-dom";
+import "./App.css";
 
 function App() {
+  const location = useLocation();
+
   return (
     <div>
-      {/* --- Global Navigation Bar --- */}
-      <nav style={{ padding: '10px', borderBottom: '1px solid #ccc' }}>
-        <Link to="/" style={{ marginRight: '15px' }}>Home</Link>
-        <Link to="/about">About</Link>
-      </nav>
-      
-      {/* --- Page Content (Renders Home or About page here) --- */}
-      <main style={{ padding: '20px' }}>
+      {/* ---- Navbar ---- */}
+      <header className="navbar">
+        <div className="nav-left">
+          <h2 className="logo">EpiWatch</h2>
+        </div>
+
+        <nav className="nav-center">
+          <Link
+            to="/"
+            className={`nav-link ${location.pathname === "/" ? "active" : ""}`}
+          >
+            Dashboard
+          </Link>
+          <Link
+            to="/analysis"
+            className={`nav-link ${
+              location.pathname === "/analysis" ? "active" : ""
+            }`}
+          >
+            Analysis
+          </Link>
+          <Link
+            to="/data"
+            className={`nav-link ${
+              location.pathname === "/data" ? "active" : ""
+            }`}
+          >
+            Data
+          </Link>
+        </nav>
+
+        <div className="nav-right">
+          <Link to="/" className="btn-get-started">
+            Get Started
+          </Link>
+        </div>
+      </header>
+
+      {/* ---- Page Content ---- */}
+      <main className="main-content">
         <Outlet />
       </main>
-      
-      {/* --- Global Footer --- */}
-      <footer>
+
+      {/* ---- Footer ---- */}
+      <footer className="footer">
         <p>&copy; 2025 EpiTrack App</p>
       </footer>
     </div>
