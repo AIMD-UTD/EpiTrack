@@ -1,56 +1,57 @@
-import React from "react";
-import { Link } from "react-router-dom";
-import "./Home.css";
+// C:/Users/Deethya Janjanam/temp/EpiTrack/src/pages/Home.jsx
 
-function Home() {
+import React from 'react';
+// Import your components once you create them
+// import Header from '../components/Header';
+// import MapContainer from '../components/MapContainer';
+// import RealTimeMonitoring from '../components/RealTimeMonitoring';
+// import FooterWidgets from '../components/FooterWidgets';
+
+const Home = () => {
   return (
-    <div className="home">
-      {/* ---- Hero Section ---- */}
-      <section className="hero">
-        <h3 className="badge">Powered by AI & News Analytics</h3>
-        <h1 className="title">
-          Predict Disease Outbreaks <br /> with News Intelligence
-        </h1>
-        <p className="subtitle">
-          EpiWatch analyzes global news sources using NLP and time-series analysis
-          to identify emerging disease trends and predict potential outbreaks before
-          they become widespread.
-        </p>
+    <div className="home-screen">
+      
+      {/* 1. Header Section */}
+      <header className="app-header">
+        <h1>EpiTrack</h1>
+      </header>
+      
+      {/* 2. Hero Section / Tagline */}
+      <section className="hero-section">
+        <h2>Predict Disease Outbreaks Before They Spread</h2>
+      </section>
 
-        <div className="hero-buttons">
-          <Link to="/analysis" className="btn primary">
-            View Dashboard →
-          </Link>
-          <Link to="/data" className="btn secondary">
-            Learn More
-          </Link>
+      {/* 3. Map and Outbreak Information (The main middle section) */}
+      <section className="map-and-info-section">
+        <div className="map-area">
+          {/* Component for the map visualization goes here */}
+        </div>
+        <aside className="outbreak-info-card">
+          <h4>Outbreak Information</h4>
+          {/* List of stats (Total Outbreaks, Infected Cases, etc.) */}
+        </aside>
+      </section>
+
+      {/* 4. Real-Time Monitoring Chart Section */}
+      <section className="monitoring-section">
+        <h3>Real Time Monitoring</h3>
+        <div className="chart-container">
+          {/* Component for the Line Chart goes here */}
         </div>
       </section>
 
-      {/* ---- Feature Grid ---- */}
-      <section className="features">
-        <div className="feature-card">
-          <h3>🩺 Real-time Monitoring</h3>
-          <p>Track disease mentions across global news sources.</p>
+      {/* 5. Footer Widgets (News and Regions) */}
+      <section className="widgets-section">
+        <div className="news-feed-widget">
+          {/* Content for the News Feed */}
         </div>
-
-        <div className="feature-card">
-          <h3>🧠 NLP Analysis</h3>
-          <p>Extract insights using advanced natural language processing.</p>
-        </div>
-
-        <div className="feature-card">
-          <h3>📈 Predictive Analytics</h3>
-          <p>Forecast disease trends using time-series analysis.</p>
-        </div>
-
-        <div className="feature-card">
-          <h3>⚠️ Early Warning</h3>
-          <p>Detect anomalies and emerging health threats early.</p>
+        <div className="regions-widget">
+          {/* Content for Regions with most cases */}
         </div>
       </section>
+{/*hello*/}
     </div>
   );
-}
+};
 
 export default Home;
