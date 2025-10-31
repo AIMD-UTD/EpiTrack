@@ -3,8 +3,9 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import App from './App.jsx';
 import Home from './pages/Home.jsx';
-import Analysis from './pages/Analysis.jsx';
-import Data from './pages/Data.jsx';
+import Dashboard from './pages/Dashboard.jsx';
+import DataSources from './pages/Datasources.jsx';
+import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -12,8 +13,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <Routes>
         <Route path="/" element={<App />}>
           <Route index element={<Home />} />
-          <Route path="analysis" element={<Analysis />} />
-          <Route path="data" element={<Data />} />
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="data-sources" element={<DataSources />} />
         </Route>
       </Routes>
     </BrowserRouter>
