@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import { Cron } from 'croner';
 import { exec } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -25,17 +25,35 @@ function runNewsScript() {
     });
 }
 
-// Schedule to run every 24 hours at 2:00 AM CDT
-cron.schedule('0 2 * * *', () => {
-    runNewsScript();
-}, {
-    scheduled: true,
-    timezone: "America/Chicago"
+// Schedule to run every 24 hours using Croner
+// Croner runs continuously even when terminal is closed if running as a service
+const job = new Cron('0 2 * * *', {
+    timezone: 'America/Chicago',
+    startAt: new Date(), // Start immediately
+    catch: true, // Catch errors and continue
+    onTrigger: () => {
+        console.log(`[${new Date().toLocaleString()}] Scheduled job triggered`);
+        runNewsScript();
+    }
 });
 
-console.log('📅 News scheduler is running...');
+console.log('📅 News scheduler is running with Croner...');
 console.log('⏰ Will fetch news every 24 hours at 2:00 AM CDT');
+console.log(`⏰ Next run scheduled for: ${job.nextRun()}`);
 console.log('Press Ctrl+C to stop\n');
 
 // Run on startup as well
 runNewsScript();
+
+// Keep the process alive
+process.on('SIGINT', () => {
+    console.log('\n📅 Stopping scheduler...');
+    job.stop();
+    process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+    console.log('\n📅 Stopping scheduler...');
+    job.stop();
+    process.exit(0);
+});
