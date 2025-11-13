@@ -1,0 +1,10 @@
+disease_name,model_used,recent_actual_mean,forecast_next_mean,pct_change_vs_recent,is_rising
+Malaria,Holt-Winters,0.857,2.16,1.52,True
+COVID-19,Holt-Winters,3.0,3.007,0.002,False
+Ebola,MovingAverage,0.6,0.6,0.0,False
+Measles,MovingAverage,2.0,2.0,0.0,False
+Meningitis,MovingAverage,2.0,2.0,0.0,False
+Zika,MovingAverage,1.0,1.0,0.0,False
+Dengue,Holt-Winters,0.857,0.026,-0.97,False
+Tuberculosis,Holt-Winters,1.143,0.024,-0.979,False
+Influenza,Holt-Winters,12.429,0.155,-0.988,False
