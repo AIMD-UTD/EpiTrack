@@ -5,6 +5,18 @@ from datetime import datetime
 import os
 from dotenv import load_dotenv
 import json
+import re
+from urllib.parse import urlparse
+import time
+from bs4 import BeautifulSoup
+
+# Try to import newspaper3k, but make it optional
+try:
+    from newspaper import Article
+    NEWSPAPER_AVAILABLE = True
+except ImportError:
+    NEWSPAPER_AVAILABLE = False
+    print("⚠️  newspaper3k not available, will use BeautifulSoup fallback only")
 
 # Load environment variables
 load_dotenv()
@@ -30,6 +42,11 @@ groups = [
     ["plague", "smallpox", "west nile", "yellow fever", "chikungunya"]
 ]
 
+# Flatten all diseases into a single list for counting
+all_diseases = []
+for group in groups:
+    all_diseases.extend(group)
+
 # Keywords for NLP analysis
 health_keywords = [
     "outbreak", "cases", "hospital", "disease", "ICU", "virus", "infection",
@@ -49,6 +66,8 @@ def get_db_connection():
 def create_table_if_not_exists(conn):
     """Create articles table if it doesn't exist"""
     cursor = conn.cursor()
+    
+    # Create table if it doesn't exist
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS articles (
             id SERIAL PRIMARY KEY,
@@ -60,15 +79,285 @@ def create_table_if_not_exists(conn):
             fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             keywords JSONB,
             confidence_score FLOAT,
+            disease_mention_count INTEGER DEFAULT 0,
+            disease_breakdown JSONB,
+            country TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-        
-        CREATE INDEX IF NOT EXISTS idx_link ON articles(link);
-        CREATE INDEX IF NOT EXISTS idx_published_at ON articles(published_at);
-        CREATE INDEX IF NOT EXISTS idx_confidence_score ON articles(confidence_score);
     """)
+    
+    # Create indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_link ON articles(link);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_published_at ON articles(published_at);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_confidence_score ON articles(confidence_score);")
+    
+    # Add new columns to existing table if they don't exist (for migration)
+    # Check and add disease_mention_count column
+    cursor.execute("""
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name='articles' AND column_name='disease_mention_count';
+    """)
+    if not cursor.fetchone():
+        try:
+            cursor.execute("ALTER TABLE articles ADD COLUMN disease_mention_count INTEGER DEFAULT 0;")
+            print("✓ Added disease_mention_count column to existing table")
+        except Exception as e:
+            print(f"Warning: Could not add disease_mention_count column: {e}")
+    
+    # Check and add disease_breakdown column
+    cursor.execute("""
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name='articles' AND column_name='disease_breakdown';
+    """)
+    if not cursor.fetchone():
+        try:
+            cursor.execute("ALTER TABLE articles ADD COLUMN disease_breakdown JSONB;")
+            print("✓ Added disease_breakdown column to existing table")
+        except Exception as e:
+            print(f"Warning: Could not add disease_breakdown column: {e}")
+    
+    # Check and add country column
+    cursor.execute("""
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name='articles' AND column_name='country';
+    """)
+    if not cursor.fetchone():
+        try:
+            cursor.execute("ALTER TABLE articles ADD COLUMN country TEXT;")
+            print("✓ Added country column to existing table")
+        except Exception as e:
+            print(f"Warning: Could not add country column: {e}")
+    
+    # Create country index after column is added
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_country ON articles(country);")
+    
+    # Create GIN index on disease_breakdown for efficient JSON queries
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_disease_breakdown ON articles USING GIN (disease_breakdown);")
+    
     conn.commit()
     cursor.close()
+
+def fetch_article_content(url, timeout=10):
+    """
+    Fetch full article content from URL using newspaper3k or BeautifulSoup fallback
+    Returns article text or None if fetching fails
+    """
+    if not url:
+        return None
+    
+    # Try newspaper3k first if available
+    if NEWSPAPER_AVAILABLE:
+        try:
+            article = Article(url)
+            article.download()
+            article.parse()
+            if article.text:
+                return article.text
+        except Exception:
+            # Fall through to BeautifulSoup method
+            pass
+    
+    # Fallback to BeautifulSoup method
+    try:
+        response = requests.get(url, timeout=timeout, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        })
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Remove script, style, and other non-content elements
+            for element in soup(["script", "style", "nav", "header", "footer", "aside", "advertisement", "ads"]):
+                element.decompose()
+            
+            # Try to find main article content
+            # Look for common article containers
+            article_content = None
+            for selector in ['article', '.article', '#article', '.content', '.post-content', '.entry-content', 'main', '.main-content']:
+                article_content = soup.select_one(selector)
+                if article_content:
+                    break
+            
+            # If no specific article container found, use body
+            if not article_content:
+                article_content = soup.find('body') or soup
+            
+            # Get text
+            text = article_content.get_text(separator=' ', strip=True)
+            
+            # Clean up excessive whitespace
+            text = ' '.join(text.split())
+            
+            # Return text (limit to reasonable size)
+            return text[:10000]  # Limit to first 10000 chars
+    except Exception as e:
+        pass
+    
+    return None
+
+def count_disease_mentions(text):
+    """
+    Count how many times diseases are mentioned in the article text
+    Returns a tuple: (total_count, breakdown_dict)
+    breakdown_dict contains {disease_name: count} for each disease found
+    """
+    if not text:
+        return 0, {}
+    
+    text_lower = text.lower()
+    total_count = 0
+    breakdown = {}
+    
+    # Count occurrences of each disease in the text
+    for disease in all_diseases:
+        disease_lower = disease.lower()
+        # For multi-word diseases (like "avian flu"), use a more flexible pattern
+        if ' ' in disease_lower:
+            # For phrases, use word boundaries at start and end
+            pattern = r'\b' + re.escape(disease_lower) + r'\b'
+        else:
+            # For single words, use word boundaries
+            pattern = r'\b' + re.escape(disease_lower) + r'\b'
+        
+        matches = re.findall(pattern, text_lower)
+        match_count = len(matches)
+        
+        if match_count > 0:
+            # Store the count for this disease (use original case from all_diseases)
+            breakdown[disease] = match_count
+            total_count += match_count
+    
+    return total_count, breakdown
+
+def extract_country_from_article(text, article_data=None, url=None):
+    """
+    Extract country/geolocation from article text using NLP
+    Also checks article_data, URL domain, and source for country information
+    Returns country name or None
+    """
+    # First, check if NewsAPI provides country information in the article data
+    if article_data:
+        country = article_data.get('country') or article_data.get('countryCode')
+        if country:
+            return country
+    
+    # Check URL domain for country hints (e.g., .co.uk, .com.au, .ca, etc.)
+    if url:
+        try:
+            domain = urlparse(url).netloc.lower()
+            # Common country domain patterns
+            country_domains = {
+                '.co.uk': 'United Kingdom',
+                '.com.au': 'Australia',
+                '.ca': 'Canada',
+                '.co.za': 'South Africa',
+                '.co.nz': 'New Zealand',
+                '.ie': 'Ireland',
+                '.in': 'India',
+                '.jp': 'Japan',
+                '.cn': 'China',
+                '.de': 'Germany',
+                '.fr': 'France',
+                '.it': 'Italy',
+                '.es': 'Spain',
+                '.br': 'Brazil',
+                '.mx': 'Mexico',
+                '.ar': 'Argentina',
+            }
+            for domain_suffix, country_name in country_domains.items():
+                if domain_suffix in domain:
+                    return country_name
+        except:
+            pass
+    
+    # Check source name for country hints
+    if article_data:
+        source_name = article_data.get('source', {}).get('name', '').lower()
+        source_country_hints = {
+            'bbc': 'United Kingdom',
+            'cnn': 'United States',
+            'reuters': 'United Kingdom',  # Reuters is international but UK-based
+            'guardian': 'United Kingdom',
+            'abc news': 'United States',
+            'cbc': 'Canada',
+            'abc australia': 'Australia',
+        }
+        for hint, country in source_country_hints.items():
+            if hint in source_name:
+                return country
+    
+    if not text:
+        return None
+    
+    # Use spaCy to extract geographic entities from text
+    doc = nlp(text)
+    countries = []
+    country_priority = {}  # Track frequency and position
+    
+    # Common country names to look for
+    common_countries = [
+        'United States', 'USA', 'US', 'America',
+        'United Kingdom', 'UK', 'Britain',
+        'Canada', 'Australia', 'New Zealand',
+        'India', 'China', 'Japan', 'South Korea',
+        'Germany', 'France', 'Italy', 'Spain',
+        'Brazil', 'Mexico', 'Argentina',
+        'South Africa', 'Nigeria', 'Kenya',
+        'Russia', 'Ukraine', 'Poland',
+    ]
+    
+    # Extract GPE (Geopolitical Entity) entities which include countries
+    for i, ent in enumerate(doc.ents):
+        if ent.label_ == "GPE":
+            ent_text = ent.text.strip()
+            ent_lower = ent_text.lower()
+            
+            # Map common abbreviations and variations
+            country_map = {
+                'us': 'United States',
+                'usa': 'United States',
+                'u.s.': 'United States',
+                'u.s.a.': 'United States',
+                'united states': 'United States',
+                'america': 'United States',
+                'uk': 'United Kingdom',
+                'u.k.': 'United Kingdom',
+                'united kingdom': 'United Kingdom',
+                'britain': 'United Kingdom',
+                'england': 'United Kingdom',
+            }
+            
+            # Check if it's a known country or variation
+            if ent_lower in country_map:
+                country_name = country_map[ent_lower]
+            elif ent_text in common_countries or any(cc.lower() in ent_lower for cc in common_countries):
+                country_name = ent_text
+            else:
+                # Check if it matches any common country (case-insensitive)
+                for cc in common_countries:
+                    if cc.lower() == ent_lower or cc.lower() in ent_lower or ent_lower in cc.lower():
+                        country_name = cc
+                        break
+                else:
+                    continue  # Skip if not a recognized country
+            
+            # Track priority (earlier mentions are more likely to be the main country)
+            if country_name not in country_priority:
+                country_priority[country_name] = {'count': 0, 'first_pos': i}
+            country_priority[country_name]['count'] += 1
+    
+    # Return the most frequently mentioned country, or the first one if tied
+    if country_priority:
+        # Sort by count (descending), then by first position (ascending)
+        sorted_countries = sorted(
+            country_priority.items(),
+            key=lambda x: (-x[1]['count'], x[1]['first_pos'])
+        )
+        return sorted_countries[0][0]
+    
+    return None
 
 def analyze_article_with_nlp(text):
     """
@@ -130,8 +419,8 @@ def save_articles_to_db(articles, conn):
             
             # Insert new article
             cursor.execute("""
-                INSERT INTO articles (title, description, link, source, published_at, keywords, confidence_score)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO articles (title, description, link, source, published_at, keywords, confidence_score, disease_mention_count, disease_breakdown, country)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 article['title'],
                 article['description'],
@@ -139,7 +428,10 @@ def save_articles_to_db(articles, conn):
                 article['source'],
                 article['published_at'],
                 json.dumps(article['keywords']),
-                article['confidence_score']
+                article['confidence_score'],
+                article.get('disease_mention_count', 0),
+                json.dumps(article.get('disease_breakdown', {})),
+                article.get('country')
             ))
             saved_count += 1
         except Exception as e:
@@ -208,12 +500,44 @@ def fetch_and_save_news():
     
     # Process articles with NLP
     processed_articles = []
-    for a in filtered:
-        # Combine title and description for NLP analysis
+    total_articles = len(filtered)
+    
+    for idx, a in enumerate(filtered, 1):
+        print(f"Processing article {idx}/{total_articles}: {a.get('title', '')[:60]}...")
+        
+        # Start with title and description
         article_text = f"{a.get('title', '')} {a.get('description', '')}"
+        
+        # Try to fetch full article content
+        article_url = a.get('url', '')
+        full_content = None
+        if article_url:
+            try:
+                print(f"  Fetching full article content from {article_url[:60]}...")
+                full_content = fetch_article_content(article_url)
+                if full_content:
+                    # Combine with title/description for better analysis
+                    article_text = f"{article_text} {full_content}"
+                    print(f"  ✓ Fetched {len(full_content)} characters of content")
+                else:
+                    print(f"  ⚠ Could not fetch full content, using title/description only")
+            except Exception as e:
+                print(f"  ⚠ Error fetching article content: {e}")
+            # Small delay to avoid rate limiting
+            time.sleep(0.5)
         
         # Analyze with spaCy
         keywords, confidence = analyze_article_with_nlp(article_text)
+        
+        # Count disease mentions (now with full article content if available)
+        disease_count, disease_breakdown = count_disease_mentions(article_text)
+        print(f"  Disease mentions found: {disease_count} total")
+        if disease_breakdown:
+            print(f"  Disease breakdown: {', '.join([f'{k}: {v}' for k, v in disease_breakdown.items()])}")
+        
+        # Extract country/geolocation (now with full article content if available)
+        country = extract_country_from_article(article_text, a, article_url)
+        print(f"  Country extracted: {country if country else 'None'}")
         
         # Parse published date
         published_at = None
@@ -225,12 +549,17 @@ def fetch_and_save_news():
         processed_articles.append({
             'title': a.get('title', ''),
             'description': a.get('description', ''),
-            'link': a.get('url', ''),
+            'link': article_url,
             'source': a.get('source', {}).get('name', ''),
             'published_at': published_at,
             'keywords': keywords,
-            'confidence_score': confidence
+            'confidence_score': confidence,
+            'disease_mention_count': disease_count,
+            'disease_breakdown': disease_breakdown,
+            'country': country
         })
+    
+    print(f"\n✓ Finished processing {len(processed_articles)} articles")
     
     # Save to database
     save_articles_to_db(processed_articles, conn)
